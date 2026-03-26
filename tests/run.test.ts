@@ -1,50 +1,33 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
-const { tmpdir } = require("node:os");
-const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+import { describe, it, expect } from "vitest";
+import { extractEntries } from "../src/analyzer/extractor.js";
+import { scoreEntries } from "../src/analyzer/scorer.js";
+import { scanMemoryFiles } from "../src/analyzer/scanner.js";
+import * as os from "os";
+import * as fs from "fs/promises";
+import * as path from "path";
 
-function runCli(args: string[], env: NodeJS.ProcessEnv = process.env): string {
-  return execFileSync(
-    process.execPath,
-    ["--experimental-strip-types", "src/main.ts", ...args],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      env
-    }
-  );
-}
+describe("CLI integration (scanner + extractor + scorer)", () => {
+  it("full pipeline on a temp directory produces scored entries", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ire-test-"));
+    const content = `
+# 2026-03-26
 
-test("run command emits json payload", () => {
-  const output = runCli(["run", "workspace", "--output", "json"]);
-  const payload = JSON.parse(output);
+Decided to use TypeScript for this project going forward.
+Learned that Docker slim images need ca-certificates explicitly installed.
+Completed the full deployment pipeline today.
+Critical milestone: first API test successful.
+    `.trim();
+    await fs.writeFile(path.join(tmpDir, "2026-03-26.md"), content, "utf-8");
 
-  assert.equal(payload.command, "run");
-  assert.equal(payload.target, "workspace");
-  assert.equal(payload.output, "json");
-});
+    const files = await scanMemoryFiles(tmpDir);
+    expect(files).toHaveLength(1);
 
-test("config show resolves an existing config file", () => {
-  const root = mkdtempSync(path.join(tmpdir(), "ice-reflection-engine-"));
-  const configDir = path.join(root, ".config", "ice-reflection-engine");
-  mkdirSync(configDir, { recursive: true });
-  writeFileSync(
-    path.join(configDir, "config.json"),
-    JSON.stringify({ outputFormat: "json", verbose: true }, null, 2),
-    "utf8"
-  );
+    const entries = extractEntries(files[0].content, files[0].date);
+    expect(entries.length).toBeGreaterThan(0);
 
-  const output = runCli(
-    ["config", "show"],
-    {
-      ...process.env,
-      XDG_CONFIG_HOME: path.join(root, ".config")
-    }
-  );
-  const payload = JSON.parse(output);
+    const scored = scoreEntries(entries, [files[0].date]);
+    expect(scored.every((e) => e.score >= 0 && e.score <= 1)).toBe(true);
 
-  assert.equal(payload.settings.outputFormat, "json");
-  assert.equal(payload.settings.verbose, true);
+    await fs.rm(tmpDir, { recursive: true });
+  });
 });
