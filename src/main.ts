@@ -1,18 +1,16 @@
-const { Command } = require("commander");
-const { registerConfigCommand } = require("./commands/config");
-const { registerRunCommand } = require("./commands/run");
+#!/usr/bin/env node
+import { Command } from "commander";
+import { createRunCommand } from "./commands/run.js";
+import { createConfigCommand } from "./commands/config.js";
 
 const program = new Command();
 
 program
   .name("ice-reflection-engine")
-  .description("A TypeScript CLI that analyzes an AI agent's daily memory logs and distills them into structured long-term memory entries. Reads YYYY-MM-DD.md files, identifies patterns and decisions, and writes curated summaries to MEMORY.md using semantic scoring.")
+  .description("Analyze AI agent daily memory logs and distill them into MEMORY.md")
   .version("0.1.0");
 
-registerRunCommand(program);
-registerConfigCommand(program);
+program.addCommand(createRunCommand());
+program.addCommand(createConfigCommand());
 
-program.parseAsync(process.argv).catch((error: Error) => {
-  process.stderr.write(`error: ${error.message}\n`);
-  process.exitCode = 1;
-});
+program.parseAsync(process.argv);
